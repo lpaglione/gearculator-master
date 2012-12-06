@@ -1,0 +1,869 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Gearculator - gear ratio calculator</title>
+		<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+		<link rel="stylesheet" type="text/css" href="css/index.css" />
+        <link rel="stylesheet" href="css/jquery.mobile-1.2.0.min.css" />
+        <style type="text/css">        	
+        	#wheel-size-table, #cadence-table {
+        		width: 100%;
+        	}
+
+        	#wheel-size-table th, #wheel-size-table td, #cadence-table th, #cadence-table td {
+        		vertical-align: middle; text-align: left;
+        	}
+        </style>
+        <script src="js/jquery-1.8.2.min.js"></script>
+		<script src="js/jquery.mobile-1.2.0.min.js"></script>
+		<script type="text/javascript" src="cordova-2.0.0.js"></script>
+		<script type="text/javascript">
+			/*
+			 * Returns the  greatest common divisor (GCD) of the given integers. Each input must be non-negative.
+			 */
+			function gcd(x, y) {
+				while (y != 0) {
+					var z = x % y;
+					x = y;
+					y = z;
+				}
+				return x;
+			}
+		    
+			
+			var DrawUtil = function() {};
+			var drawUtil = new DrawUtil();
+			
+			DrawUtil.prototype._canvasCache = {};
+			
+			DrawUtil.prototype.cachedRingId = function(numT) {
+				return "ring-canvas-" + numT;
+			}
+			
+			DrawUtil.prototype.drawCachedRing = function (numT) {
+					var canId = this.cachedRingId(numT);
+					
+					jqObj.cahcedCanvases.append("<canvas width='"+ display.maxWheelWidthPx + "' height='"+ display.maxWheelWidthPx+"' id='" + [canId] + "' style='position: absolute;'></canvas>");
+					this._canvasCache[canId] = document.getElementById([canId]);
+					var newContext = this._canvasCache[canId].getContext("2d");
+					
+					// http://www.scienceprimer.com/drawing-regular-polygons-javascript-canvas
+					// http://html5example.net/entry/html5-canvas/html5-canvas-gears
+					var centerX = display.maxWheelWidthPx / 2;
+					var centerY = display.maxWheelWidthPx / 2;
+					var lineWidth = (6 * display.pxPerMM);
+					var teethlength = (12 * display.pxPerMM);
+					var radiusMM = 12.5 / ( 2 * Math.sin( Math.PI / numT ) );
+					var radiusPx = radiusMM * display.pxPerMM - lineWidth;
+					var sizePx = radiusPx * 2;
+					var teethRaiusPx = radiusPx + teethlength;
+					
+					newContext.clearRect(0, 0, display.maxWheelWidthPx, display.maxWheelWidthPx);
+					newContext.beginPath();
+					newContext.arc(centerX, centerY, radiusPx, 0, 2 * Math.PI, false);
+					newContext.lineWidth = lineWidth;
+					for (i = 0; i < numT; i++) {
+						newContext.moveTo (centerY +  radiusPx * Math.cos(i * 2 * Math.PI / numT), centerY +  radiusPx *  Math.sin(i * 2 * Math.PI / numT));
+						newContext.lineTo (centerX + teethRaiusPx * Math.cos(i * 2 * Math.PI / numT), centerY + teethRaiusPx * Math.sin(i * 2 * Math.PI / numT));
+					}
+					newContext.strokeStyle = "#05F017";
+					newContext.stroke();
+				 
+			}
+			
+			DrawUtil.prototype.drawChainRing = function (context, numT) {
+				var canId = this.cachedRingId(numT);
+				if (this._canvasCache[canId] == undefined) {
+					this.drawCachedRing(numT);
+				}
+				context.clearRect(0, 0, display.maxWheelWidthPx, display.maxWheelWidthPx);
+				context.drawImage(this._canvasCache[canId], 0, 0);
+				
+			};
+			
+			DrawUtil.prototype.drawCachedSkid = function(numSkids) {
+					var canId = this.cachedSkidId(numSkids);
+					if (!document.getElementById(canId)) {
+						jqObj.cahcedCanvases.append("<canvas width='"+ display.maxWheelWidthPx + "' height='"+ display.maxWheelWidthPx+"' id='" + canId + "' style='position: absolute;'></canvas>");
+					}
+					this._canvasCache[canId] = document.getElementById(canId);
+					var newContext = this._canvasCache[canId].getContext("2d");
+					var centerX = display.maxWheelWidthPx / 2;
+					var centerY = display.maxWheelWidthPx / 2;
+					var lineWidth = 15 * display.pxPerMM;
+					var radius = inputs.wheelSize * display.pxPerMM / 2 - (lineWidth * 2); 
+					
+					newContext.clearRect(0, 0, display.maxWheelWidthPx, display.maxWheelWidthPx);
+					for (var i = 0; i < numSkids; i++) {
+						newContext.beginPath();
+						var pos = i *  360 / numSkids + 90; 
+						newContext.strokeStyle = "#76006d";
+						newContext.lineWidth = lineWidth;
+						newContext.arc(centerX, centerY, radius, pos/360 * 2 * Math.PI, (pos + 3)/ 360 * 2 * Math.PI , false);
+						newContext.stroke();
+					}			
+			};
+			
+			DrawUtil.prototype.cachedSkidId = function(numSkids) {
+				return "skid-canvas-" + numSkids;
+			}
+			
+			DrawUtil.prototype.drawSkid = function (context, numSkids) {
+				var canId = this.cachedSkidId(numSkids);
+				if (this._canvasCache[canId] == undefined) {
+					this.drawCachedSkid(numSkids);
+				} 
+				context.clearRect(0, 0, display.maxWheelWidthPx, display.maxWheelWidthPx);
+				context.drawImage(this._canvasCache[canId], 0, 0);
+			};
+
+			DrawUtil.prototype.drawWheel = function (context) {
+				var centerX = display.maxWheelWidthPx / 2;
+				var centerY = display.maxWheelWidthPx / 2;
+				var lineWidth = 45 * display.pxPerMM;
+				var radius = inputs.wheelSize * display.pxPerMM / 2 - lineWidth; 
+
+				context.clearRect(0, 0, display.maxWheelWidthPx, display.maxWheelWidthPx);
+				context.beginPath();
+				context.arc(centerX, centerY, radius, 0, 2 * Math.PI, false);
+				context.strokeStyle = "#FA20EA";
+				context.lineWidth = 45 * display.pxPerMM;
+				context.stroke();
+				
+			};
+			
+			function updateSkidPatches(fCog, bCog) {
+				var ratioGCD = gcd(fCog, bCog);
+				var bSmallistRatio = inputs.bCog / ratioGCD;
+				var fSmallistRatio = inputs.fCog / ratioGCD;
+				inputs.skidPatches = inputs.bCog / ratioGCD;
+				inputs.ambidextrousSkidPatches = inputs.skidPatches;
+				//alert(fSmallistRatio % 2 != 0)
+				if ( fSmallistRatio % 2 != 0) inputs.ambidextrousSkidPatches = inputs.skidPatches * 2;
+			}
+			
+			function toMph(kph) {
+				return kph * 0.621371;
+			}
+			
+			function calcKph(ratio,wheelSizeMM, cadence) {
+				return ratio * wheelSizeMM * Math.PI * cadence * 60 / 1000000;
+			}
+			
+			function calcRatio() {
+				return inputs.fCog / inputs.bCog;
+			}
+			
+			function updateStats(inputs) {
+				var ratio = calcRatio();
+				updateSkidPatches(inputs.fCog, inputs.bCog);
+				var kph = calcKph(ratio,inputs.wheelSize, inputs.cadence);
+				jqObj.ratio.html(ratio.toFixed(2));
+				jqObj.kph.html(kph.toFixed(2));
+				jqObj.mph.html(toMph(kph).toFixed(2));
+				
+				jqObj.skidPatches.html(inputs.skidPatches);
+				jqObj.ambidextrousSkidPatches.html(inputs.ambidextrousSkidPatches);
+				changeWheelButtonTxt();
+				changeCadenceButtonTxt();
+
+			}
+			
+			
+			
+			var constants = {};
+			constants.maxWheelWidthMM = 914.4;
+			
+			var inputs = {
+				wheelSize :  679,
+				fCog: 46,
+				bCog: 16,
+				cadence: 90
+			};	
+			
+			var display = {};
+			var el = {};
+			var jqObj = {};
+			var context = {};
+			var Timeout = function(){};
+			Timeout.prototype._cache = {};
+			
+			Timeout.prototype.runLast = function(id, fn) {
+				//if (this._cache[id] != null) { clearTimeout(this._cache[id])};
+				this._cache[id] = setTimeout(function() { fn() }, 100);
+			};
+			
+			var timeout = new Timeout();
+			
+			function displaySetUp() {
+				display.windowW = $(window).width();
+				display.maxWheelWidthPx = Math.floor(display.windowW / 2);
+				if ($(window).height() / 2 < display.maxWheelWidthPx) display.maxWheelWidthPx = $(window).height() / 2;
+				
+				display.numDispFontSize = display.maxWheelWidthPx / 9;
+				display.pxPerMM = display.maxWheelWidthPx / constants.maxWheelWidthMM;
+			
+				var $cContainer = $("#canvas-container");
+				$cContainer.height(display.maxWheelWidthPx);
+				
+				el.backRing.width = display.maxWheelWidthPx;
+				el.backRing.height = display.maxWheelWidthPx;
+				el.backRing.style.left = $cContainer.offset().left + 'px';
+				el.backRing.style.top = $cContainer.offset().top + 'px';
+				
+				el.backWheel.width = display.maxWheelWidthPx;
+				el.backWheel.height = display.maxWheelWidthPx;
+				el.backWheel.style.left =  $cContainer.offset().left + 'px';
+				el.backWheel.style.top =  $cContainer.offset().top + 'px';
+				
+				el.skid.width = display.maxWheelWidthPx;
+				el.skid.height = display.maxWheelWidthPx;
+				el.skid.style.left =  $cContainer.offset().left + 'px';
+				el.skid.style.top =  $cContainer.offset().top + 'px';
+				
+				el.frontRing.width = display.maxWheelWidthPx;
+				el.frontRing.height = display.maxWheelWidthPx;
+				el.frontRing.style.left =  $cContainer.offset().left + display.maxWheelWidthPx * 9 / 16 + 'px';
+				el.frontRing.style.top =  $cContainer.offset().top +  ( display.maxWheelWidthPx * 0.05) + 'px';
+
+				$('#num-disp').css("font-size", display.numDispFontSize +'px');
+				
+				
+
+			}
+						
+			function changeWheelButtonTxt() {
+				$('#wheel-size-page-button-txt').html(inputs.wheelSize + 'mm Tire Diameter');
+			}
+			
+			function changeCadenceButtonTxt() {
+				$('#cadence-page-button-txt').html(inputs.cadence + ' Cadence');
+			}
+			
+			function initAll() {
+				//show    
+				$.mobile.loading( 'show' );
+
+				el.backWheel = document.getElementById("back-wheel-canvas");
+				el.skid = document.getElementById("skid-canvas");	
+				el.backRing = document.getElementById("back-ring-canvas");
+				el.frontRing = document.getElementById("front-ring-canvas");
+				el.cahcedCanvases  = document.getElementById("cahced-canvases");
+				
+				jqObj.wheelSize = $('#wheel-size');
+				jqObj.fCog = $('#f-cog');
+				jqObj.bCog = $('#b-cog');
+				jqObj.cadence = $('#cadence');
+				jqObj.ratio = $("#ratio");
+				jqObj.kph = $("#kph");
+				jqObj.mph = $("#mph");
+				jqObj.skidPatches = $("#skid-patches");
+				jqObj.ambidextrousSkidPatches = $("#ambidextrous-skid-patches");
+				jqObj.cahcedCanvases= $("#cahced-canvases");
+				
+				context.backWheel = el.backWheel.getContext("2d");
+				context.skid = el.skid.getContext("2d");
+				context.backRing = el.backRing.getContext("2d");
+				context.frontRing = el.frontRing.getContext("2d");
+	
+				displaySetUp();	
+				
+				
+				inputs.wheelSize = $('#wheel-size').val();  // having issues with this one
+				inputs.fCog = jqObj.fCog.val();
+				inputs.bCog = jqObj.bCog.val();
+				inputs.cadence = jqObj.cadence.val();
+				
+				display.bCog = inputs.bCog;
+				display.fCog = inputs.fCog;
+				
+				updateStats(inputs);
+				updateCadenceTable();
+				
+				for (var i = 0; i < 38; i++) {
+					drawUtil.drawCachedSkid(i);
+				}
+				for (var i = 8; i < 54; i++) {
+					drawUtil.drawCachedRing(i);
+				}
+
+				drawUtil.drawWheel(context.backWheel);
+				drawUtil.drawChainRing(context.backRing,inputs.bCog);
+				drawUtil.drawChainRing(context.frontRing, inputs.fCog);
+				drawUtil.drawSkid(context.skid, inputs.skidPatches);
+				//hide
+				$.mobile.loading( 'hide' );
+
+			}
+			
+			//JQ on ready
+			$(function () {
+			
+			/*	if (window.cordova) {
+					document.addEventListener("deviceready", initAll, false);
+				} else {
+					initAll();
+				}
+			*/
+			});
+			
+			function animateBCog() {
+				inputs.bCog = jqObj.bCog.val();
+				if (display.bCog == inputs.bCog) {
+				    return;
+				}
+				if (Math.abs(display.bCog - inputs.bCog) < 3) var numCog = inputs.bCog;
+				else var numCog =  Math.ceil((Number(display.bCog) + Number(inputs.bCog))/2);
+				display.bCog = numCog;
+				drawUtil.drawChainRing(context.backRing,numCog, false);
+				updateSkidPatches(display.fCog, numCog);
+				drawUtil.drawSkid(context.skid, inputs.skidPatches);
+				setTimeout(function() { 
+					animateBCog();
+				}, 50);
+			}
+			
+			function animateFCog() {
+				inputs.fCog = jqObj.fCog.val();
+				if (display.fCog == inputs.fCog) {
+					updateStats(inputs);
+					return;
+				}
+				if (Math.abs(display.fCog - inputs.fCog) < 3) var numCog = inputs.fCog;
+				else var numCog =  Math.ceil((Number(display.fCog) + Number(inputs.fCog))/2);
+				display.fCog = numCog;
+				drawUtil.drawChainRing(context.frontRing,numCog);
+				updateSkidPatches(display.bCog, numCog);
+				drawUtil.drawSkid(context.skid, inputs.skidPatches);
+				setTimeout(function() { 
+					animateFCog();
+				}, 100);
+			}
+
+			function updateCadenceTable() {
+				var kph = null;
+				for (var i=50; i<=130; i = i + 10) {
+					kph = calcKph(calcRatio(),inputs.wheelSize, i);
+					$("div#cadence-page table#cadence-table td#kph-" + i).html(kph.toFixed(2) + " ");
+					$("div#cadence-page table#cadence-table td#mph-" + i).html(toMph(kph).toFixed(2) + " ");
+				}
+			}
+						
+			function changeWheelSize() {
+				$.mobile.loading( 'show' );
+				updateStats(inputs);
+				for (var i = 0; i < 38; i++) {
+					drawUtil.drawCachedSkid(i);
+				}						
+				drawUtil.drawWheel(context.backWheel);
+				drawUtil.drawSkid(context.skid, inputs.skidPatches);	
+				$.mobile.loading( 'hide' );
+			}
+			
+			$(document).live('pageinit', function(event, ui) {
+				
+			});
+
+			$('div#index-page').live('pageinit', function(event, ui) {
+				
+				$('div#index-page input#f-cog').live('change', function(event, ui){
+					inputs.fCog = $('div#index-page input#f-cog').val();
+					updateStats(inputs);
+					setTimeout(function() { 
+						animateFCog();
+					}, 100);
+				});
+				
+				$('div#index-page input#b-cog').live('change', function(event, ui){
+					inputs.bCog = $('div#index-page input#b-cog').val();
+					updateStats(inputs);
+					 setTimeout(function() { 
+						animateBCog();
+					}, 100);
+				});
+
+				
+				$('div#index-page').live('pageshow', function(event,data) {
+					initAll();
+					if (inputs.wheelSize != $('div#wheel-size-page #wheel-size').val()) {
+						inputs.wheelSize = $('div#wheel-size-page #wheel-size').val();
+						changeWheelSize();
+					}
+				});
+			});
+
+			$('div#cadence-page').live('pageinit', function(event, ui) {					
+				$('div#cadence-page input#cadence').live('change', function(event, ui){
+					inputs.cadence = $('div#cadence-page input#cadence').val();
+					updateStats(inputs);
+				});
+				
+				$('div#cadence-page .cadenceButtons').live('click', function(event,data){
+					var size = $(this).attr("value");
+					$('#cadence-page').page();
+					$('#cadence').val(size);
+					$('#cadence').slider('refresh');
+					$.mobile.changePage( "#index-page", { transition: "flip"} );		
+				});			
+					
+				$('div#cadence-page').live('pageshow', function(event,data) {
+					updateCadenceTable();
+				});
+			});
+			
+			
+			$('div#wheel-size-page').live('pageinit', function(event, ui) {						
+				$('div#wheel-size-page .wheelSizeButtons').live('click', function(event,data){
+					var size = $(this).attr("value");
+					$('#wheel-size-page').page();
+					$('#wheel-size').val(size);
+					$('#wheel-size').slider('refresh');
+					$.mobile.changePage( "#index-page", { transition: "flip"} );		
+				});
+			});
+			
+			
+		</script>
+	</head>
+    <body>
+		<div id="index-page" data-role="page" data-theme="a">
+			<div data-role="header"> 
+				<h1>Gearculator</h1>
+				<a href="#about-page" data-role="button" data-transition="flip">About</a>							
+			</div> 
+			<div data-role="content" style="padding-top: 0px;">	
+				<div id="canvas-container">
+					<div style="width: 35%; height: 100%; float: right; display: table;">
+						<div id="num-disp"  style="display: table-cell; vertical-align: middle; font-weight: bold;">
+							RATIO
+							<span id="ratio">&nbsp;</span><br />
+							<br />
+							MPH
+							<span id="mph">&nbsp;</span><br />
+							<br />
+							KPH	
+							<span id="kph">&nbsp;</span><br />
+						</div>
+					</div>
+					<canvas width="100" height="100" id="back-wheel-canvas" style="position: absolute;" ></canvas>
+					<canvas width="100" height="100" id="skid-canvas" style="position: absolute;" ></canvas>
+					<canvas width="100" height="100" id="back-ring-canvas" style="position: absolute;" ></canvas>
+					<canvas width="100" height="100" id="front-ring-canvas" style="position: absolute;"></canvas>
+				</div>
+				<div style="clear: both;"></div>
+				Skid Patches <span id="skid-patches"></span> (ambidextrous <span id="ambidextrous-skid-patches"></span>)
+				<div data-role="fieldcontain">
+				<label for="f-cog">Front Chainring (Teeth)</label>
+				<input type="range" name="f-cog" id="f-cog" value="46" min="20" max="52" />
+				</div>
+				<div data-role="fieldcontain">
+				<label for="b-cog">Back Cog (Teeth)</label>
+				<input type="range" name="b-cog" id="b-cog" value="16" min="10" max="38" />
+				</div>
+				<div id="bottom-buttons">
+					<div class="ui-grid-a">
+						<div class="ui-block-a"><a href="#cadence-page" id="cadence-page-button" data-role="button" data-transition="flip"><span id='cadence-page-button-txt'></span></a></div>
+						<div class="ui-block-b"><a href="#wheel-size-page" id="wheel-size-page-button" data-role="button" data-transition="flip"><span id='wheel-size-page-button-txt'></span></a></div>
+					</div>
+				</div>
+				<div id="cahced-canvases" style="display: none;">
+				</div>
+			</div>
+		</div>
+		<div id="wheel-size-page" data-role="page" data-theme="a">
+			<div data-role="header">
+				<h1>Wheel Size</h1>
+				<a href="#index-page" data-role="botton" data-transition="flip">Back</a>
+			</div>
+			<div data-role="content"	>	
+				<div data-role="fieldcontain">
+					<label for="wheel-size">Wheel Size (Millimeter)</label>
+					<input type="range" name="wheel-size" id="wheel-size" value="679" min="342" max="914" />
+				</div>		
+				<p>This is the diameter of wheel measured top to bottom. Below are estimates.</p>
+				<table id="wheel-size-table">
+					<tr>
+						<td colspan="4"><h3>Common Sizes</h3></td>
+					</tr>
+					<tr>
+					   <th>29er Mountian</th>
+					   <td>29.00 in&nbsp; </td>
+					   <td>737 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='737' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>Road 700cc&nbsp; </th>
+					   <td>26.76 in&nbsp; </td>
+					   <td>680 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='680' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26er Mountian&nbsp; </th>
+					   <td>26 X 1.9 </td>
+					   <td>654 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='654' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+						<td colspan="4"><br /><h3>Suggested Specific Sizes</h3></td>
+					</tr>					
+					<tr>
+					   <th>29 inch (nominal)&nbsp; </th>
+					   <td>29.00 in&nbsp; </td>
+					   <td>737 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='737' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>28 inch (nominal)&nbsp; </th>
+					   <td>28.00 in&nbsp; </td>
+					   <td>711 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='711' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>27 inch (nominal)&nbsp; </th>
+					   <td>27.00 in&nbsp; </td>
+					   <td>686 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='686' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 inch (nominal)&nbsp; </th>
+					   <td>26.00 in&nbsp; </td>
+					   <td>660 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='660' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 56 / 56-622 / 29 inch&nbsp; </th>
+					   <td>29.13 in&nbsp; </td>
+					   <td>740 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='740' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 50 / 50-622 / 29 inch&nbsp; </th>
+					   <td>28.94 in&nbsp; </td>
+					   <td>735 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='735' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 44 / 44-622 / 29 inch&nbsp; </th>
+					   <td>27.86 in&nbsp; </td>
+					   <td>708 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='708' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 38 / 38-622&nbsp; </th>
+					   <td>27.32 in&nbsp; </td>
+					   <td>694 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='694' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 35 / 35-622&nbsp; </th>
+					   <td>27.17 in&nbsp; </td>
+					   <td>690 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='690' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 32 / 32-622&nbsp; </th>
+					   <td>27.00 in&nbsp; </td>
+					   <td>686 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='686' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 28 / 28-622&nbsp; </th>
+					   <td>26.76 in&nbsp; </td>
+					   <td>680 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='680' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 25 / 25-622&nbsp; </th>
+					   <td>26.38 in&nbsp; </td>
+					   <td>670 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='670' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 23 / 23-622&nbsp; </th>
+					   <td>26.28 in&nbsp; </td>
+					   <td>668 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='668' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>700 X 20 / 20-622&nbsp; </th>
+					   <td>26.14 in&nbsp; </td>
+					   <td>664 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='664' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>Tubular / Wide&nbsp; </th>
+					   <td>26.53 in&nbsp; </td>
+					   <td>674 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='674' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>Tubular / Narrow&nbsp; </th>
+					   <td>26.38 in&nbsp; </td>
+					   <td>670 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='670' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>28 X 1 1/2 / 40-635&nbsp; </th>
+					   <td>28.15 in&nbsp; </td>
+					   <td>715 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='715' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>27 X 1 3/8 / 35-630&nbsp; </th>
+					   <td>27.18 in&nbsp; </td>
+					   <td>690 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='690' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>27 X 1 1/4 / 32-630&nbsp; </th>
+					   <td>27.08 in&nbsp; </td>
+					   <td>688 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='688' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>27 X 1 1/8 / 28-630&nbsp; </th>
+					   <td>27.00 in&nbsp; </td>
+					   <td>686 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='686' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>27 X 1 / 25-630&nbsp; </th>
+					   <td>26.88 in&nbsp; </td>
+					   <td>683 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='683' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 X 2.35 / 60-559 / MTB&nbsp; </th>
+					   <td>26.41 in&nbsp; </td>
+					   <td>671 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='671' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 X 2.125 / 54-559 / MTB&nbsp; </th>
+					   <td>25.94 in&nbsp; </td>
+					   <td>659 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='659' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 X 1.9 / 47-559 / MTB&nbsp; </th>
+					   <td>25.75 in&nbsp; </td>
+					   <td>654 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='654' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 X 1.5 / 38-559 / MTB&nbsp; </th>
+					   <td>24.87 in&nbsp; </td>
+					   <td>632 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='632' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 X 1.25 / 32-559 / MTB&nbsp; </th>
+					   <td>24.47 in&nbsp; </td>
+					   <td>622 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='622' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 X 1.0 / 25-559 / MTB&nbsp; </th>
+					   <td>23.97 in&nbsp; </td>
+					   <td>609 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='609' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>650 x 38b / 38-584 650B&nbsp; </th>
+					   <td>26.00 in&nbsp; </td>
+					   <td>660 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='660' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>650 x 28C / 28-571 / 26" road/tri&nbsp; </th>
+					   <td>24.70 in&nbsp; </td>
+					   <td>627 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='627' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>650 x 25C / 25-571 / 26" road/tri&nbsp; </th>
+					   <td>24.46 in&nbsp; </td>
+					   <td>621 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='621' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>650 x 23C / 23-571 / 26" road/tri&nbsp; </th>
+					   <td>24.31 in&nbsp; </td>
+					   <td>617 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='617' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>26 X 1 3/8 / 35-590&nbsp; </th>
+					   <td>25.91 in&nbsp; </td>
+					   <td>658 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='658' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>24 inch (nominal)&nbsp; </th>
+					   <td>24.00 in&nbsp; </td>
+					   <td>610 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='610' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>24 x 1 / 25-520&nbsp; </th>
+					   <td>21.97 in&nbsp; </td>
+					   <td>558 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='558' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>32-451 /20 x 1 3/8&nbsp; </th>
+					   <td>20.15 in&nbsp; </td>
+					   <td>512 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='512' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>28-451/20 x 1 1/8&nbsp; </th>
+					   <td>19.90 in&nbsp; </td>
+					   <td>505 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='505' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>20 X 1.75 / 44-406 / BMX&nbsp; </th>
+					   <td>18.68 in&nbsp; </td>
+					   <td>474 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='474' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>20 X 1.25 / 32-406&nbsp; </th>
+					   <td>18.43 in&nbsp; </td>
+					   <td>468 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='468' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>18 x 1.5 / 40-355&nbsp; </th>
+					   <td>17.16 in&nbsp; </td>
+					   <td>436 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='436' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>17 x 1 1/4 / 28-369&nbsp; </th>
+					   <td>16.60 in&nbsp; </td>
+					   <td>422 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='422' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>16 x 1 1/2 / 40-349&nbsp; </th>
+					   <td>16.88 in&nbsp; </td>
+					   <td>429 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='429' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>16 x 1 3/8 / 35-349&nbsp; </th>
+					   <td>16.07 in&nbsp; </td>
+					   <td>408 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='408' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>16 x 1.5 / 37-305&nbsp; </th>
+					   <td>13.46 in&nbsp; </td>
+					   <td>342 mm&nbsp; </td>
+					   <td><button class='wheelSizeButtons' type='button' value='342' data-mini='true'>Select</button></td>
+					</tr>				
+				</table>
+			</div>
+		</div>
+		<div id="cadence-page" data-role="page" data-theme="a">
+			<div data-role="header">
+				<h1>Cadence</h1>
+				<a href="#index-page" data-role="botton" data-transition="flip">Back</a>
+			</div>
+			<div data-role="content">	
+				<p>Cadence is the number of revolutions of the crank per minute, or the rate at which the cyclist is pedelling.</p>
+				<div data-role="fieldcontain">
+					<label for="cadence">Cadence</label>
+					<input type="range" name="cadence" id="cadence" value="90" min="10" max="140" />
+				</div>
+				<table id="cadence-table">
+					<tr>
+						<th>Cadence</th>
+						<th>MPH</th>
+						<th>KPH</th>
+						<th></th>
+					</tr>
+					<tr>
+					   <th>50</th>
+					   <td id="mph-50"></td>
+					   <td id="kph-50"></td>
+					   <td><button class='cadenceButtons' type='button' value='50' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>60</th>
+					   <td id="mph-60"></td>
+					   <td id="kph-60"></td>
+					   <td><button class='cadenceButtons' type='button' value='60' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>70</th>
+					   <td id="mph-70"></td>
+					   <td id="kph-70"></td>
+					   <td><button class='cadenceButtons' type='button' value='70' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>80</th>
+					   <td id="mph-80"></td>
+					   <td id="kph-80"></td>
+					   <td><button class='cadenceButtons' type='button' value='80' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>90</th>
+					   <td id="mph-90"></td>
+					   <td id="kph-90"></td>
+					   <td><button class='cadenceButtons' type='button' value='90' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>100</th>
+					   <td id="mph-100"></td>
+					   <td id="kph-100"></td>
+					   <td><button class='cadenceButtons' type='button' value='100' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>110</th>
+					   <td id="mph-110"></td>
+					   <td id="kph-110"></td>
+					   <td><button class='cadenceButtons' type='button' value='110' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>120</th>
+					   <td id="mph-120"></td>
+					   <td id="kph-120"></td>
+					   <td><button class='cadenceButtons' type='button' value='120' data-mini='true'>Select</button></td>
+					</tr>
+					<tr>
+					   <th>130</th>
+					   <td id="mph-130"></td>
+					   <td id="kph-130"></td>
+					   <td><button class='cadenceButtons' type='button' value='130' data-mini='true'>Select</button></td>
+					</tr>
+				</table>
+
+			</div>
+		</div>
+		<div id="about-page" data-role="page" data-theme="a">
+			<div data-role="header">
+				<h1>About Gearculator</h1>
+				<a href="#index-page" data-role="botton" data-transition="flip">Back</a>
+			</div>
+			<div data-role="content">	
+				<p>This project was about having some coding fun, between jobs. Send feedback to <a href="mailto:info@rcpeters.com">info@rcpeters.com</a> or <a href="https://github.com/rcpeters/gearculator">https://github.com/rcpeters/gearculator</a>
+				I should also give a shout out to <a href="http://sheldonbrown.com/">Sheldon Brown</a> for providing tire size data
+				and <a href="http://www.bikecalc.com/">BikeCalc</a> for providing an skid patch explanation.
+				</p>		
+				<p>
+					<h3>Where you can find this app:</h3>
+					<ul>
+						<li><a href="http://wrongbike.com/gear/">Web</a> (Free)</li>
+						<li><a href="https://play.google.com/store/apps/details?id=com.phonegap.gear.ratios">Android</a> (Buy to show support)</li>
+						<li><a href="https://itunes.apple.com/us/app/gearculator/id573108194?mt=8">iOS</a> (Buy to show support)</li>
+					</ul>
+				</p>
+			</div>
+		</div>
+    </body>
+</html>
